@@ -1,5 +1,10 @@
 """Builds 7 days x 5 satellite puzzles. Usage: python scripts/build_week.py [start-date]"""
-import json, math, random, sys, pathlib, datetime as dt, urllib.parse, urllib.request
+import json, math, random, sys, time, socket, pathlib, datetime as dt, urllib.parse, urllib.request
+
+# GitHub runners often have no IPv6 route; prefer IPv4 addresses when the host offers them.
+_gai = socket.getaddrinfo
+socket.getaddrinfo = lambda *a, **k: [r for r in _gai(*a, **k) if r[0] == socket.AF_INET] or _gai(*a, **k)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA, IMGS = ROOT / "data", ROOT / "images"
 ZOOM_KM = [40, 32, 26, 20, 14]   # puzzle 1 is zoomed out (easier), puzzle 5 zoomed in (harder)
@@ -61,7 +66,15 @@ def fetch(lat, lon, km, path):
         layers="s2cloudless-2020", styles="", format="image/jpeg", srs="EPSG:4326",
         bbox=f"{lon-dlon},{lat-dlat},{lon+dlon},{lat+dlat}", width=640, height=640))
     req = urllib.request.Request("https://tiles.maps.eox.at/wms?" + q, headers={"User-Agent": "aerial-game/1.0"})
-    data = urllib.request.urlopen(req, timeout=90).read()
+    for attempt in range(4):
+        try:
+            data = urllib.request.urlopen(req, timeout=90).read()
+            break
+        except Exception as e:
+            print(f"attempt {attempt+1}/4 failed: {e!r}", file=sys.stderr)
+            if attempt == 3:
+                raise
+            time.sleep(5 * (attempt + 1))
     if data[:2] != b"\xff\xd8":
         raise RuntimeError(f"Not a JPEG: {data[:200]!r}")
     path.write_bytes(data)

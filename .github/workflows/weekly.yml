@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check imagery server is reachable
+        run: curl -4 -sS -m 30 -o /dev/null -w "HTTP %{http_code}\n" "https://tiles.maps.eox.at/wms?service=WMS&request=GetCapabilities" || true
       - run: python scripts/build_week.py
       - run: |
           git config user.name "puzzle-bot"

@@ -1,0 +1,19 @@
+name: Build weekly puzzles
+on:
+  schedule:
+    - cron: "0 6 * * 0"   # Sundays 06:00 UTC
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/build_week.py
+      - run: |
+          git config user.name "puzzle-bot"
+          git config user.email "puzzle-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Add weekly puzzles"
+          git push

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aerial</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<style>
+:root{--bg:#161a44;--ink:#f6ecdf;--dim:#a9a6c9;--amber:#ffc86b;--hit:#64c79a;--near:#f2c14e;--miss:#ee6b7e;--panel:#232866;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,sans-serif;line-height:1.4}
+main{max-width:460px;margin:0 auto;padding:14px 16px 28px}
+header{display:flex;justify-content:space-between;align-items:baseline}
+h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.5px}
+#meta{color:var(--dim);font-size:14px}
+#pips{display:flex;gap:6px;margin:10px 0}
+.pip{flex:1;height:5px;border-radius:3px;background:var(--panel)}
+.pip.on{background:var(--amber)}.pip.cur{background:var(--ink)}
+.card{border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.card svg{display:block;width:100%;height:auto}
+.tries{display:flex;gap:8px;margin:12px 0 6px;align-items:center;color:var(--dim);font-size:14px}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--panel)}
+.dot.miss{background:var(--miss)}.dot.ok{background:var(--hit)}
+.log{list-style:none;margin:0;padding:0}
+.log li{display:flex;justify-content:space-between;padding:9px 12px;margin-top:6px;background:var(--panel);border-radius:10px;font-size:16px}
+.log b{color:var(--amber);font-weight:600}
+.hint{margin:10px 0 0;color:var(--dim);font-size:15px;min-height:22px}
+input{width:100%;margin-top:10px;padding:14px;font:inherit;font-size:17px;color:var(--ink);background:var(--panel);border:2px solid transparent;border-radius:12px}
+input:focus{outline:none;border-color:var(--amber)}
+#sug button,.btn{display:block;width:100%;text-align:left;font:inherit;font-size:16px;color:var(--ink);background:transparent;border:0;padding:12px;border-bottom:1px solid var(--panel);cursor:pointer}
+#sug button small{color:var(--dim)}
+.btn{background:var(--amber);color:#2a1d05;font-weight:800;text-align:center;border-radius:12px;margin-top:14px;padding:14px}
+.btn.alt{background:var(--panel);color:var(--ink)}
+.reveal{margin-top:12px;padding:14px;border-radius:14px;background:var(--panel)}
+.reveal h2{margin:0;font-size:24px}.reveal p{margin:4px 0 0;color:var(--dim)}
+.big{font-size:54px;font-weight:800;margin:6px 0 0;line-height:1}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--panel)}
+.stats{display:flex;gap:10px;margin-top:12px}.stats div{flex:1;background:var(--panel);border-radius:12px;padding:10px;text-align:center}
+.stats b{display:block;font-size:22px}.stats span{font-size:13px;color:var(--dim)}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Aerial</h1><div id="meta"></div></header>
+<div id="pips"></div>
+<div id="view"></div>
+<p class="hint" style="font-size:12px">Imagery: Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus Sentinel data).</p>
+</main>
+<script>
+// name,country,continent,lat,lon,difficulty,landmarks,[minH,maxH]
+let C=[],ALL=[],IMG={};
+const FIND=n=>ALL.find(c=>c[0]===n);
+const aerial=c=>`<img src="${IMG[c[0]]}" alt="Satellite view of a city" style="display:block;width:100%;aspect-ratio:1/1;object-fit:cover">`;
+
+// ---- game logic ----
+const EPOCH=Math.floor(Date.UTC(2026,9,1)/864e5);
+const DAY=Math.floor((Date.now()-new Date().getTimezoneOffset()*6e4)/864e5);
+const NO=Math.max(1,DAY-EPOCH+1);
+const PTS=[100,60,30];
+function todaysSet(){return[0,1,2,3,4]}
+function hav(a,b){const R=6371,t=Math.PI/180,dl=(b[4]-a[4])*t,dp=(b[3]-a[3])*t;
+  const h=Math.sin(dp/2)**2+Math.cos(a[3]*t)*Math.cos(b[3]*t)*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+function dir(a,b){const t=Math.PI/180,dl=(b[4]-a[4])*t,p1=a[3]*t,p2=b[3]*t;
+  const y=Math.sin(dl)*Math.cos(p2),x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
+  return"↑↗→↘↓↙←↖"[Math.round(((Math.atan2(y,x)*180/Math.PI+360)%360)/45)%8]}
+const fmt=n=>Math.round(n).toLocaleString("en-US");
+
+let ST={played:0,streak:0,best:0,last:-1},S=null,msg="";
+function fresh(){return{day:DAY,set:todaysSet(),i:0,rounds:[0,1,2,3,4].map(()=>({g:[],done:false,score:0})),counted:false}}
+try{const d=JSON.parse(localStorage.getItem("aerial-v1")||"null");if(d){ST=d.ST||ST;if(d.S&&d.S.day===DAY)S=d.S}}catch(e){}
+if(!S)S=fresh();
+function save(){try{localStorage.setItem("aerial-v1",JSON.stringify({ST,S}))}catch(e){}}
+
+function guess(name){
+  const R=S.rounds[S.i];if(R.done)return;
+  const ans=C[S.set[S.i]],g=FIND(name);if(!g||R.g.some(x=>x.n===name))return;
+  const ok=name===ans[0],km=ok?0:hav(g,ans);
+  R.g.push({n:name,ok,km,d:ok?"":dir(g,ans)});
+  if(ok){R.done=true;R.score=PTS[R.g.length-1]}else if(R.g.length>=3){R.done=true;R.score=0}
+  save();render();
+}
+function next(){
+  if(S.i<4)S.i++;else finish();
+  save();render();
+}
+function finish(){
+  S.i=5;
+  if(!S.counted){S.counted=true;ST.played++;ST.streak=ST.last===DAY-1?ST.streak+1:1;ST.best=Math.max(ST.best,ST.streak);ST.last=DAY}
+}
+const total=()=>S.rounds.reduce((a,r)=>a+r.score,0);
+const tiles=r=>[0,1,2].map(j=>j<r.g.length?(r.g[j].ok?"🟩":r.g[j].km<1500?"🟨":"🟥"):"⬛").join("");
+function shareText(){return`Aerial #${NO} · ${total()}/500\n`+S.rounds.map(tiles).join("\n")}
+function copyShare(btn){
+  const t=shareText(),done=()=>{btn.textContent="Copied"};
+  try{navigator.clipboard.writeText(t).then(done,()=>fb())}catch(e){fb()}
+  function fb(){const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy");done()}catch(e){btn.textContent="Copy failed"}a.remove()}
+}
+
+function suggest(){
+  const q=document.getElementById("q").value.trim().toLowerCase(),box=document.getElementById("sug");
+  if(!q){box.innerHTML="";return}
+  const used=S.rounds[S.i].g.map(x=>x.n);
+  const m=ALL.filter(c=>!used.includes(c[0])&&c[0].toLowerCase().includes(q)).sort((a,b)=>(b[0].toLowerCase().startsWith(q)-a[0].toLowerCase().startsWith(q))).slice(0,5);
+  box.innerHTML=m.map(c=>`<button data-n="${c[0]}">${c[0]} <small>${c[1]}</small></button>`).join("");
+}
+function render(){
+  document.getElementById("meta").textContent=`#${NO} · streak ${ST.streak}`;
+  document.getElementById("pips").innerHTML=[0,1,2,3,4].map(i=>`<div class="pip ${i<S.i?"on":i===S.i?"cur":""}"></div>`).join("");
+  const v=document.getElementById("view");
+  if(S.i>=5){
+    v.innerHTML=`<div class="reveal"><p>Today's score</p><div class="big">${total()}<small style="font-size:22px;color:var(--dim)"> / 500</small></div></div>
+    ${S.rounds.map((r,i)=>`<div class="row"><span>${C[S.set[i]][0]}</span><span>${tiles(r)} ${r.score}</span></div>`).join("")}
+    <div class="stats"><div><b>${ST.played}</b><span>played</span></div><div><b>${ST.streak}</b><span>streak</span></div><div><b>${ST.best}</b><span>best streak</span></div></div>
+    <button class="btn" id="shr">Copy result</button><p class="hint">New skylines arrive at midnight.</p>`;
+    document.getElementById("shr").onclick=e=>copyShare(e.target);return;
+  }
+  const ans=C[S.set[S.i]],R=S.rounds[S.i],miss=R.g.filter(x=>!x.ok).length;
+  const hint=miss===0?"Which city is this?":`Continent: ${ans[2]}`+(miss>=2?` · Starts with ${ans[0][0]}`:"");
+  let h=`<div class="card">${aerial(ans)}</div>
+  <div class="tries"><span>City ${S.i+1} of 5</span>${[0,1,2].map(j=>`<span class="dot ${R.g[j]?(R.g[j].ok?"ok":"miss"):""}"></span>`).join("")}</div>
+  <ul class="log">${R.g.map(x=>`<li><span>${x.n}</span><b>${x.ok?"Correct":`${fmt(x.km)} km ${x.d}`}</b></li>`).join("")}</ul>`;
+  if(R.done){
+    h+=`<div class="reveal"><h2>${ans[0]}, ${ans[1]}</h2><p>${R.score?`+${R.score} points`:"No points this time"}</p></div>
+    <button class="btn" id="nx">${S.i<4?"Next city":"See results"}</button>`;
+  }else{
+    h+=`<p class="hint">${hint}</p><input id="q" placeholder="Type a city" autocomplete="off" autocapitalize="off" spellcheck="false"><div id="sug"></div>`;
+  }
+  v.innerHTML=h;
+  if(R.done)document.getElementById("nx").onclick=next;
+  else{
+    const q=document.getElementById("q");q.oninput=suggest;
+    q.onkeydown=e=>{if(e.key==="Enter"){const b=document.querySelector("#sug button");if(b)guess(b.dataset.n)}};
+    document.getElementById("sug").onclick=e=>{const b=e.target.closest("button");if(b)guess(b.dataset.n)};
+  }
+}
+const KEY=new Date(DAY*864e5).toISOString().slice(0,10);
+const V=document.getElementById("view");
+Promise.all([fetch("data/current.json").then(r=>r.json()),fetch("data/cities.json").then(r=>r.json())]).then(([cur,cities])=>{
+  ALL=cities.slice().sort((a,b)=>a[0].localeCompare(b[0]));
+  const d=cur.days[KEY];
+  if(!d){V.innerHTML='<p class="hint">No puzzle for today yet. Check back soon.</p>';return}
+  d.forEach(p=>{C.push(FIND(p.n));IMG[p.n]=p.img});
+  render();
+}).catch(()=>{V.innerHTML='<p class="hint">Could not load today\'s puzzle.</p>'});
+</script>
+</body>
+</html>

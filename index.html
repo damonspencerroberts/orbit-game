@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Aerial</title>
+<title>Orbit</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
 <style>
 :root{--bg:#161a44;--ink:#f6ecdf;--dim:#a9a6c9;--amber:#ffc86b;--hit:#64c79a;--near:#f2c14e;--miss:#ee6b7e;--panel:#232866;
@@ -43,16 +43,28 @@ input:focus{outline:none;border-color:var(--amber)}
 </head>
 <body>
 <main>
-<header><h1>Aerial</h1><div id="meta"></div></header>
+<header><h1>Orbit</h1><div id="meta"></div></header>
 <div id="pips"></div>
 <div id="view"></div>
 <p class="hint" style="font-size:12px">Imagery: Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus Sentinel data).</p>
 </main>
 <script>
 // name,country,continent,lat,lon,difficulty,landmarks,[minH,maxH]
-let C=[],ALL=[],IMG={};
+const CITIES=[["Paris", "France", "Europe", 48.86, 2.35], ["New York", "USA", "North America", 40.71, -74.01], ["Dubai", "UAE", "Asia", 25.2, 55.27], ["Sydney", "Australia", "Oceania", -33.87, 151.21], ["Seattle", "USA", "North America", 47.61, -122.33], ["Rio de Janeiro", "Brazil", "South America", -22.91, -43.17], ["Cairo", "Egypt", "Africa", 30.04, 31.24], ["London", "UK", "Europe", 51.51, -0.13], ["Tokyo", "Japan", "Asia", 35.68, 139.69], ["Toronto", "Canada", "North America", 43.65, -79.38], ["San Francisco", "USA", "North America", 37.77, -122.42], ["Singapore", "Singapore", "Asia", 1.35, 103.82], ["Moscow", "Russia", "Europe", 55.76, 37.62], ["Barcelona", "Spain", "Europe", 41.39, 2.17], ["Istanbul", "Turkey", "Europe & Asia", 41.01, 28.98], ["Shanghai", "China", "Asia", 31.23, 121.47], ["Chicago", "USA", "North America", 41.88, -87.63], ["Kuala Lumpur", "Malaysia", "Asia", 3.14, 101.69], ["Hong Kong", "China", "Asia", 22.32, 114.17], ["Cape Town", "South Africa", "Africa", -33.92, 18.42], ["Berlin", "Germany", "Europe", 52.52, 13.4], ["Madrid", "Spain", "Europe", 40.42, -3.7], ["Rome", "Italy", "Europe", 41.9, 12.5], ["Amsterdam", "Netherlands", "Europe", 52.37, 4.9], ["Lisbon", "Portugal", "Europe", 38.72, -9.14], ["Athens", "Greece", "Europe", 37.98, 23.73], ["Venice", "Italy", "Europe", 45.44, 12.33], ["Mumbai", "India", "Asia", 19.08, 72.88], ["Delhi", "India", "Asia", 28.61, 77.21], ["Beijing", "China", "Asia", 39.9, 116.4], ["Seoul", "South Korea", "Asia", 37.57, 126.98], ["Bangkok", "Thailand", "Asia", 13.76, 100.5], ["Taipei", "Taiwan", "Asia", 25.03, 121.57], ["Jakarta", "Indonesia", "Asia", -6.2, 106.85], ["Los Angeles", "USA", "North America", 34.05, -118.24], ["Miami", "USA", "North America", 25.76, -80.19], ["Houston", "USA", "North America", 29.76, -95.37], ["Las Vegas", "USA", "North America", 36.17, -115.14], ["Washington DC", "USA", "North America", 38.9, -77.04], ["Vancouver", "Canada", "North America", 49.28, -123.12], ["Mexico City", "Mexico", "North America", 19.43, -99.13], ["Buenos Aires", "Argentina", "South America", -34.6, -58.38], ["São Paulo", "Brazil", "South America", -23.55, -46.63], ["Lima", "Peru", "South America", -12.05, -77.04], ["Lagos", "Nigeria", "Africa", 6.52, 3.38], ["Johannesburg", "South Africa", "Africa", -26.2, 28.05], ["Nairobi", "Kenya", "Africa", -1.29, 36.82], ["Melbourne", "Australia", "Oceania", -37.81, 144.96], ["Auckland", "New Zealand", "Oceania", -36.85, 174.76]];
+let C=[],ALL=CITIES.slice().sort((a,b)=>a[0].localeCompare(b[0])),IMG={};
 const FIND=n=>ALL.find(c=>c[0]===n);
-const aerial=c=>`<img src="${IMG[c[0]]}" alt="Satellite view of a city" style="display:block;width:100%;aspect-ratio:1/1;object-fit:cover">`;
+function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const KM=30; // fixed view width in km for every puzzle
+function pick(day,slot){ // each city appears once per round of N picks, so repeats are spread out
+  const i=day*5+slot,N=CITIES.length,round=Math.floor(i/N),r=rng(round*7919+17),p=CITIES.map((_,k)=>k);
+  for(let k=N-1;k>0;k--){const j=Math.floor(r()*(k+1));[p[k],p[j]]=[p[j],p[k]]}
+  return CITIES[p[i%N]];
+}
+function imgUrl(c,seed){
+  const r=rng(seed),la=c[3]+(r()-.5)*.04,lo=c[4]+(r()-.5)*.04,dla=KM/111/2,dlo=KM/(111*Math.cos(la*Math.PI/180))/2;
+  return`https://tiles.maps.eox.at/wms?service=WMS&request=GetMap&version=1.1.1&layers=s2cloudless-2020&styles=&format=image/jpeg&srs=EPSG:4326&bbox=${lo-dlo},${la-dla},${lo+dlo},${la+dla}&width=640&height=640`;
+}
+const aerial=c=>`<img src="${IMG[c[0]]}" alt="Loading satellite view..." referrerpolicy="no-referrer" onerror="this.alt='Image failed to load. Check your connection and reload.'" style="display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#232866;color:#a9a6c9">`;
 
 // ---- game logic ----
 const EPOCH=Math.floor(Date.UTC(2026,9,1)/864e5);
@@ -69,9 +81,9 @@ const fmt=n=>Math.round(n).toLocaleString("en-US");
 
 let ST={played:0,streak:0,best:0,last:-1},S=null,msg="";
 function fresh(){return{day:DAY,set:todaysSet(),i:0,rounds:[0,1,2,3,4].map(()=>({g:[],done:false,score:0})),counted:false}}
-try{const d=JSON.parse(localStorage.getItem("aerial-v1")||"null");if(d){ST=d.ST||ST;if(d.S&&d.S.day===DAY)S=d.S}}catch(e){}
+try{const d=JSON.parse(localStorage.getItem("orbit-v1")||"null");if(d){ST=d.ST||ST;if(d.S&&d.S.day===DAY)S=d.S}}catch(e){}
 if(!S)S=fresh();
-function save(){try{localStorage.setItem("aerial-v1",JSON.stringify({ST,S}))}catch(e){}}
+function save(){try{localStorage.setItem("orbit-v1",JSON.stringify({ST,S}))}catch(e){}}
 
 function guess(name){
   const R=S.rounds[S.i];if(R.done)return;
@@ -91,7 +103,7 @@ function finish(){
 }
 const total=()=>S.rounds.reduce((a,r)=>a+r.score,0);
 const tiles=r=>[0,1,2].map(j=>j<r.g.length?(r.g[j].ok?"🟩":r.g[j].km<1500?"🟨":"🟥"):"⬛").join("");
-function shareText(){return`Aerial #${NO} · ${total()}/500\n`+S.rounds.map(tiles).join("\n")}
+function shareText(){return`Orbit #${NO} · ${total()}/500\n`+S.rounds.map(tiles).join("\n")}
 function copyShare(btn){
   const t=shareText(),done=()=>{btn.textContent="Copied"};
   try{navigator.clipboard.writeText(t).then(done,()=>fb())}catch(e){fb()}
@@ -117,7 +129,7 @@ function render(){
     document.getElementById("shr").onclick=e=>copyShare(e.target);return;
   }
   const ans=C[S.set[S.i]],R=S.rounds[S.i],miss=R.g.filter(x=>!x.ok).length;
-  const hint=miss===0?"Which city is this?":`Continent: ${ans[2]}`+(miss>=2?` · Starts with ${ans[0][0]}`:"");
+  const hint=miss===0?"Which city is this?":miss===1?`Clue: it is in ${ans[2]}`:`Clues: ${ans[2]}, ${ans[1]}, starts with ${ans[0][0]}`;
   let h=`<div class="card">${aerial(ans)}</div>
   <div class="tries"><span>City ${S.i+1} of 5</span>${[0,1,2].map(j=>`<span class="dot ${R.g[j]?(R.g[j].ok?"ok":"miss"):""}"></span>`).join("")}</div>
   <ul class="log">${R.g.map(x=>`<li><span>${x.n}</span><b>${x.ok?"Correct":`${fmt(x.km)} km ${x.d}`}</b></li>`).join("")}</ul>`;
@@ -135,15 +147,8 @@ function render(){
     document.getElementById("sug").onclick=e=>{const b=e.target.closest("button");if(b)guess(b.dataset.n)};
   }
 }
-const KEY=new Date(DAY*864e5).toISOString().slice(0,10);
-const V=document.getElementById("view");
-Promise.all([fetch("data/current.json").then(r=>r.json()),fetch("data/cities.json").then(r=>r.json())]).then(([cur,cities])=>{
-  ALL=cities.slice().sort((a,b)=>a[0].localeCompare(b[0]));
-  const d=cur.days[KEY];
-  if(!d){V.innerHTML='<p class="hint">No puzzle for today yet. Check back soon.</p>';return}
-  d.forEach(p=>{C.push(FIND(p.n));IMG[p.n]=p.img});
-  render();
-}).catch(()=>{V.innerHTML='<p class="hint">Could not load today\'s puzzle.</p>'});
+for(let i=0;i<5;i++){const c=pick(DAY,i);C.push(c);IMG[c[0]]=imgUrl(c,DAY*10+i)}
+render();
 </script>
 </body>
 </html>
